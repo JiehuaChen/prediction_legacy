@@ -86,6 +86,8 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			chol.est.list.used[[i]] <- chol.est.list[[i]]
 		}
 		
+		rm(list=ls()[!ls()%in%c("locations.est.list", "alpha.est.list", "phi.est", "sigma2.est", "sigma2.alpha.est", "mean.coef.est","covar.selected.map", "predict.grid","chol.est.list", "depth.pred", "mean.covar", "sd.covar", "origin.x","res.x", "origin.y", "res.y", "chol.est.list.used", "tiffile")])
+
 		covar.selected.map <-  c(1, 2, 3, 4, 6, 7, 12, 13, 15, 16)
 		source("invcor_list_pred_chol.R")
 			
