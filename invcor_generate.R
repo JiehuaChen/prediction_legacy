@@ -25,7 +25,7 @@ for(i in 1:length(d.site)){
 	print(i)	
 }
 
-save(chol.est.list, "chol_est_list.RData")
+save(chol.est.list, file="chol_est_list.RData")
 
 # for(j in 1:length(phi.est)){
 	# d.site.scaled  <- lapply(lapply(d.site, "-"), "/", phi.est[j]) 
