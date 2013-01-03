@@ -4,6 +4,7 @@ f <- file("stdin")
 open(f)
 key <- 0
 options(warn=2)
+taper.range <- 40
 
 while(length(line <- readLines(f,n=1)) > 0) {
 	system(paste("hadoop dfs get s3://afsis.legacy.prediction/data/", line, sep=""))
@@ -24,17 +25,11 @@ while(length(line <- readLines(f,n=1)) > 0) {
 		}
 		evi.mask <- readGDAL(tiffile, band=5)@data$band1
 	if(sum(!is.na(evi.mask))>0){
-		predict.gridx <- seq(origin.x, origin.x + (totalcols-1)*res.x, by=res.x)
-		predict.gridy <- seq(origin.y - (totalrows-1)*res.y, origin.y, by=res.y)
-		predict.grid <- cbind(x=rep(predict.gridx, totalrows), y=sort(rep(predict.gridy, totalcols), decreasing=TRUE))
-		predict.grid <- predict.grid/1000		
-		predict.grid <- predict.grid[!is.na(evi.mask),]
-		
-		meansd.read <- read.table("meansd.txt",header=TRUE)
-		mean.covar <- meansd.read[1, ]
-		sd.covar <- meansd.read[2, ]
-		
 		load("mcmc_results_SOC.RData")
+		covar.selected.est <- c( "bio1", "bio12", "CTI_1K", "ELEV_1K", "EVIM_1K", "M13RB1ALT", "NPP_Mean_1", "RELIEF_1K", "lstday", "lstnight")
+		mean.covar <- colMeans(aflegacy[, (names(aflegacy)%in%covar.selected.est)])
+		sd.covar <- sqrt(diag(var(aflegacy[, (names(aflegacy)%in%covar.selected.est)])))
+	
 		aflegacy.lambertcord <- project(cbind(aflegacy$Lon, aflegacy$Lat), "+proj=laea +datum=WGS84 +lat_0=5 +lon_0=20")
 		aflegacy.lambertcord <- aflegacy.lambertcord/1000
 
@@ -50,7 +45,14 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			k <- k+(sizes.site[[i]])[1]
 		}
 		
-	
+		predict.gridx <- seq(origin.x, origin.x + (totalcols-1)*res.x, by=res.x)
+		predict.gridy <- seq(origin.y - (totalrows-1)*res.y, origin.y, by=res.y)
+		predict.grid <- cbind(x=rep(predict.gridx, totalrows), y=sort(rep(predict.gridy, totalcols), decreasing=TRUE))
+		predict.grid <- predict.grid/1000		
+		predict.grid <- predict.grid[!is.na(evi.mask),]
+		
+
+		
 		depth.pred <- read.table("depthpred.txt")
 				
 		#prepare MCMC results
@@ -76,7 +78,7 @@ while(length(line <- readLines(f,n=1)) > 0) {
 		kept.chol <- NA
 		for(i in 1:(dim(predict.grid)[1])){
 			dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
-			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, 100))>0)*(1:length(locations.est.list))	
+			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
 			kept.chol <- c(kept.chol, (dist.toest.taper.index[-1]-1)[dist.toest.taper.index[-1]>0])
 			print(i)
 		}
@@ -86,7 +88,7 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			chol.est.list.used[[i]] <- chol.est.list[[i]]
 		}
 		
-		rm(list=ls()[!ls()%in%c("locations.est.list", "alpha.est.list", "phi.est", "sigma2.est", "sigma2.alpha.est", "mean.coef.est","covar.selected.map", "predict.grid","chol.est.list", "depth.pred", "mean.covar", "sd.covar", "origin.x","res.x", "origin.y", "res.y", "chol.est.list.used", "tiffile")])
+		rm(list=ls()[!ls()%in%c("locations.est.list", "alpha.est.list", "phi.est", "sigma2.est", "sigma2.alpha.est", "mean.coef.est","covar.selected.map", "predict.grid","chol.est.list.used", "depth.pred", "mean.covar", "sd.covar", "origin.x","res.x", "origin.y", "res.y", "chol.est.list.used", "tiffile", "taper.range")])
 
 		covar.selected.map <-  c(1, 2, 3, 4, 6, 7, 12, 13, 15, 16)
 		source("invcor_list_pred_chol.R")
@@ -99,11 +101,11 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			predcov.values <- readGDAL(tiffile, band=covar.selected.map, offset=c(pixeln.y, pixeln.x), region.dim=c(1,1), silent=TRUE)@data
 			predcov.values.scaled <- t((t(predcov.values)-mean.covar)*(1/sd.covar))
 			dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
-			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, 100))>0)*(1:length(locations.est.list))	
+			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
 			if(sum(dist.toest.taper.index)==0){
-				pred.random <- 0
+				pred.random <- rnorm(length(phi.est), 0, sqrt(sigma2.alpha.est))
 			}else{
-			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index)
+			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index, taper.range)
 			alpha.selected <- do.call("rbind", alpha.est.list[dist.toest.taper.index])
 			kg.mean <- diag(t(alpha.selected)%*%kg.term.values[[1]])
 			kg.var <- sigma2.alpha.est - sigma2.alpha.est*kg.term.values[[2]]
@@ -111,16 +113,14 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			}
 			for(dp in 1:dim(depth.pred)[1]){
 				log.depth.pred1 <- log(depth.pred[dp,1])
-				predcov.values.whole <- cbind(1, t(predcov.values.scaled), t(predcov.values.scaled*log.depth.pred1), log.depth.pred1)
+				predcov.values.whole <- cbind(1, (predcov.values.scaled), (predcov.values.scaled*log.depth.pred1), log.depth.pred1)
 				pred.fixed <- (predcov.values.whole%*%mean.coef.est)
 				pred.post.draw <- exp(pred.fixed + pred.random + rnorm(length(phi.est), 0, sqrt(sigma2.est)))
 				pred.mean <- mean(pred.post.draw)
 				pred.sd <- apply(log(pred.post.draw), 1, sd)
 				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.mean), paste("depth", depth.pred[dp,1], "SOC.mean.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)
 				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.sd), paste("depth", depth.pred[dp,1], "SOC.sd.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)
-			}		
-		rm(list=c("pred.post.draw", "dist.toest","kg.term.values", "kg.mean", "kg.var", "pred.mean")	)
-				
+			}							
 		print(paste("processing time", i))
 		print(proc.time()-ptm)
 
@@ -132,11 +132,11 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			predcov.values <- readGDAL(tiffile, band=covar.selected.map, offset=c(pixeln.y, pixeln.x), region.dim=c(1,1), silent=TRUE)@data
 			predcov.values.scaled <- t((t(predcov.values)-mean.covar)*(1/sd.covar))
 			dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
-			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, 100))>0)*(1:length(locations.est.list))	
+			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
 			if(sum(dist.toest.taper.index)==0){
-				pred.random <- 0
+				pred.random <- rnorm(length(phi.est), 0, sqrt(sigma2.alpha.est))
 			}else{
-			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index)
+			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index, taper.range)
 			alpha.selected <- do.call("rbind", alpha.est.list[dist.toest.taper.index])
 			kg.mean <- diag(t(alpha.selected)%*%kg.term.values[[1]])
 			kg.var <- sigma2.alpha.est - sigma2.alpha.est*kg.term.values[[2]]
@@ -144,7 +144,7 @@ while(length(line <- readLines(f,n=1)) > 0) {
 			}
 			for(dp in 1:dim(depth.pred)[1]){
 				log.depth.pred1 <- log(depth.pred[dp,1])
-				predcov.values.whole <- cbind(1, t(predcov.values.scaled), t(predcov.values.scaled*log.depth.pred1), log.depth.pred1)
+				predcov.values.whole <- cbind(1, (predcov.values.scaled), (predcov.values.scaled*log.depth.pred1), log.depth.pred1)
 				pred.fixed <- (predcov.values.whole%*%mean.coef.est)
 				pred.post.draw <- exp(pred.fixed + pred.random + rnorm(length(phi.est), 0, sqrt(sigma2.est)))
 				pred.mean <- mean(pred.post.draw)

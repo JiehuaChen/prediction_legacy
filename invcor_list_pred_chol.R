@@ -9,11 +9,11 @@ loccords.jc <- function(predloc, locations.est.cluster){
 	return(dist.dif)
 }
 		
-kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index){
+kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index, taper.range){
 	kg.selected <- rep(0, length(phi.est))
 	kg.var <- rep(0, length(phi.est))
 	if(dist.toest.taper.index[1]>0){
-		sph.toest <-  sph.cor.func(dist.toest[[dist.toest.taper.index[1]]], 100)
+		sph.toest <-  sph.cor.func(dist.toest[[dist.toest.taper.index[1]]], taper.range)
 		kg.selected <- rbind(kg.selected, mapply("*", lapply(lapply(1/phi.est, "*", (-dist.toest[[1]])), exp), list(sph.toest)))
 		kg.var <- colSums(kg.selected^2)
 	}
@@ -27,7 +27,7 @@ kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index){
 
 		for(i in 1:s){
 			cor.toest <-  lapply(lapply(1/phi.est,"*", (-dist.toest.selected[[i]])), exp)
-			sph.toest <-  sph.cor.func(dist.toest.selected[[i]], 100)
+			sph.toest <-  sph.cor.func(dist.toest.selected[[i]], taper.range)
 			cor.toest.taper <- lapply(cor.toest,"*", sph.toest)
 			cor.toest.kg <- mapply(backsolve, chol.selected[[i]], mapply(l=lapply(chol.selected[[i]], t), forwardsolve, x=cor.toest.taper, SIMPLIFY=FALSE))
 			kg.selected <- rbind(kg.selected, cor.toest.kg)	
