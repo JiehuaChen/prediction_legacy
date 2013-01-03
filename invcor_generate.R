@@ -15,17 +15,17 @@ phi.est <- mcmc.results.onechain[(P+K+3), ]
 	# print(i)	
 # }
 
-chol.est <- vector("list", length(d.site))
+chol.est.list <- vector("list", length(d.site))
 
 for(i in 1:length(d.site)){
 	d.site.scaled  <- lapply(1/phi.est,"*", (-d.site[i][[1]]))
 	cor <- lapply(d.site.scaled, exp)
 	cor.taper <- lapply(cor, "*", (sph.cor20.site[i][[1]]))
-	chol.est[[i]] <- lapply(cor.taper, chol)
+	chol.est.list[[i]] <- lapply(cor.taper, chol)
 	print(i)	
 }
 
-save(chol.est, "chol_est_list.RData")
+save(chol.est.list, "chol_est_list.RData")
 
 # for(j in 1:length(phi.est)){
 	# d.site.scaled  <- lapply(lapply(d.site, "-"), "/", phi.est[j]) 
