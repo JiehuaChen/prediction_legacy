@@ -72,7 +72,7 @@ while(length(line <- readLines(f,n=1)) > 0) {
 		sigma2.est <- mcmc.results.onechain[(P+K+1), ]
 		sigma2.alpha.est <- mcmc.results.onechain[(P+K+2), ]
 		phi.est <- mcmc.results.onechain[(P+K+3),]
-		load("chol_est_list.RData")
+		load("chol_est_list_SOC.RData")
 		source("invcor_list_pred_chol.R")
 
 		kept.chol <- NA
