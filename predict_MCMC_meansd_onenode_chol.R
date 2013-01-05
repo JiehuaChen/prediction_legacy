@@ -5,12 +5,8 @@ open(f)
 key <- 0
 options(warn=2)
 taper.range <- 40
-
-while(length(line <- readLines(f,n=1)) > 0) {
-	system(paste("hadoop dfs get s3://afsis.legacy.prediction/data/", line, sep=""))
-	if(length(gep("\\.tif$", oneline))>0){
-		library(rgdal)
-		tiffile <- line
+	library(rgdal)
+		tiffile <- "predictgrid.tif"
 		tif.info <- GDALinfo(tiffile, silent=TRUE)
 		totalcols <- tif.info[2]
 		totalrows <- tif.info[1]
@@ -155,6 +151,4 @@ while(length(line <- readLines(f,n=1)) > 0) {
 		print(paste("processing time", i))
 		print(proc.time()-ptm)
 		}
-		}		
-	}	
-}
+	}		
