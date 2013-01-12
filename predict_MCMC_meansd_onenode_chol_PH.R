@@ -81,10 +81,11 @@ depth.pred <- read.table("depthpred.txt")
 #load rgdal
 	library(rgdal)
 	
+	setwd("/mnt/ebs-volumne/cloudwork")
+	
 while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 	line.split <- strsplit(line, split=",")
 	system(paste("hadoop dfs -get s3n://afsis.legacy.prediction/data/dataForEachNode/", line.split[[1]][1], " .", sep=""))
-	system(paste("hadoop dfs -get s3n://afsis.legacy.prediction/data/dataForEachNode/", line.split[[1]][2], " .", sep=""))
 	if(length(grep("\\.tif$", line.split[[1]][1]))>0){	
 		startt <- proc.time()
 		tiffile <- line.split[[1]][1]
@@ -110,9 +111,15 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		predict.grid <- predict.grid[!is.na(evi.mask),]
 			
 		block_count <- dim(predict.grid)[1]
-				
-		load(line.split[[1]][2])
-							
+		setwd("chol.est.list.PH")
+		chol.est.list.used.combined <- vector("list", (length(locations.est.list)-1))
+		kept.chol <- as.numeric(strsplit(line.split[[1]][2], split=" ")[[1]])
+		for(k in kept.chol){	
+			load(paste("chol_est_list_PH", k, "RData", sep="."))
+			chol.est.list.used.combined[[k]] <- chol.est.list.used		
+		}
+			
+		setwd("..")					
 		#predict for the first point	
 		i <- 1	
 		ptm <- proc.time()
@@ -127,7 +134,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 			if(sum(dist.toest.taper.index)==0){
 				pred.random <- rnorm(length(phi.est), 0, sqrt(sigma2.alpha.est))
 			}else{
-			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index, taper.range)
+			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used.combined, dist.toest.taper.index, taper.range)
 			alpha.selected <- do.call("rbind", alpha.est.list[dist.toest.taper.index])
 			kg.mean <- diag(t(alpha.selected)%*%kg.term.values[[1]])
 			kg.var <- sigma2.alpha.est - sigma2.alpha.est*kg.term.values[[2]]
@@ -168,7 +175,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 				if(sum(dist.toest.taper.index)==0){
 					pred.random <- rnorm(length(phi.est), 0, sqrt(sigma2.alpha.est))
 				}else{
-				kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used, dist.toest.taper.index, taper.range)
+				kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used.combined, dist.toest.taper.index, taper.range)
 				alpha.selected <- do.call("rbind", alpha.est.list[dist.toest.taper.index])
 				kg.mean <- diag(t(alpha.selected)%*%kg.term.values[[1]])
 				kg.var <- sigma2.alpha.est - sigma2.alpha.est*kg.term.values[[2]]
@@ -203,7 +210,8 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		}	
 		system(paste("hadoop dfs -put", paste(line, "PH.processtime.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
 		cat("LongValueSum:1\t" , block_count)
-		rm(list="chol.est.list.used")
+		cat("LongValueSum:", line.split[[1]][1], "\t", " 1", sep="")
+		rm(list="chol.est.list.used.combined")
 		}		
 	}
 	system(paste("rm", line.split[[1]][1]))
