@@ -210,7 +210,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 			system(paste("hadoop dfs -put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "SOC.sd.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
 		}	
 		system(paste("hadoop dfs -put", paste(line.split[[1]][1], "SOC.processtime.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
-		cat("LongValueSum:1" , block_count, sep="\t")
+		cat("LongValueSum:1\t" , block_count, "\n" , sep="")
 		rm(list=c("chol.est.list.used.combined"))
 		gc()
 		}		
