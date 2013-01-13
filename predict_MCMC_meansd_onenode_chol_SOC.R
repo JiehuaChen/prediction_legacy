@@ -49,6 +49,9 @@ kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index, 
 	return(list(kg.selected, kg.var))
 }
 
+setwd("/mnt/ebs-volume/cloudwork")
+
+
 load("mcmc_results_SOC.RData")
 covar.selected.est <- c( "bio1", "bio12", "CTI_1K", "ELEV_1K", "EVIM_1K", "M13RB1ALT", "NPP_Mean_1", "RELIEF_1K", "lstday", "lstnight")
 mean.covar <- colMeans(aflegacy[, (names(aflegacy)%in%covar.selected.est)])
@@ -81,7 +84,6 @@ depth.pred <- read.table("depthpred.txt")
 #load rgdal
 	library(rgdal)
 
-	setwd("/mnt/ebs-volumne/cloudwork")
 		
 while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 	line.split <- strsplit(line, split=",")
@@ -101,7 +103,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		}else{
 		origin.y <- tif.info[5]	
 		}
-		evi.mask <- readGDAL(tiffile, band=5)@data$band1
+		evi.mask <- readGDAL(tiffile, band=5, silent=TRUE)@data$band1
 		block_count <- 0
 	if(sum(!is.na(evi.mask))>0){
 		predict.gridx <- seq(origin.x, origin.x + (totalcols-1)*res.x, by=res.x)
@@ -117,8 +119,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		for(k in kept.chol){	
 			load(paste("chol_est_list_SOC", k, "RData", sep="."))
 			chol.est.list.used.combined[[k]] <- chol.est.list.used		
-		}
-			
+		}		
 		setwd("..")				
 		#predict for the first point	
 		i <- 1	
@@ -208,14 +209,12 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 			system(paste("hadoop dfs -put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "SOC.mean.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
 			system(paste("hadoop dfs -put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "SOC.sd.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
 		}	
-		system(paste("hadoop dfs -put", paste(line, "SOC.processtime.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
-		cat("LongValueSum:1\t" , block_count)
-		cat("LongValueSum:", line.split[[1]][1], "\t", " 1", sep="")
-		rm(list="chol.est.list.used.combined")
+		system(paste("hadoop dfs -put", paste(line.split[[1]][1], "SOC.processtime.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
+		cat("LongValueSum:1" , block_count, sep="\t")
+		rm(list=c("chol.est.list.used.combined"))
+		gc()
 		}		
 	}
-	system(paste("rm", line.split[[1]][1]))
-	system(paste("rm", line.split[[1]][2]))		
 }
 
 close(f)
