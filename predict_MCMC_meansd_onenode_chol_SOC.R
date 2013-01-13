@@ -129,7 +129,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		predcov.values <- readGDAL(tiffile, band=covar.selected.map, offset=c(pixeln.y, pixeln.x), region.dim=c(1,1), silent=TRUE)@data
 		predcov.values.scaled <- t((t(predcov.values)-mean.covar)*(1/sd.covar))
 		# only predict the locations with reasonable covariates
-		if(sum(abs(predcov.values.scaled)>10)==0){
+		if(sum(abs(predcov.values.scaled)>100)==0){
 			dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
 			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
 			if(sum(dist.toest.taper.index)==0){
