@@ -31,10 +31,9 @@ kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index, 
 	
 	if(sum(dist.toest.taper.index[-1]>0)){
 		dist.toest.selected <- dist.toest[dist.toest.taper.index[-1]]
-		dist.toest.taper.index[-1] <- ifelse(dist.toest.taper.index[-1]>0, dist.toest.taper.index[-1]-1, 0)
-
-		chol.selected <- chol.est.list[dist.toest.taper.index[-1]] 
 		s <- sum(dist.toest.taper.index>0&dist.toest.taper.index!=1)
+		dist.toest.taper.index[-1] <- ifelse(dist.toest.taper.index[-1]>0, dist.toest.taper.index[-1]-1, 0)
+		chol.selected <- chol.est.list[dist.toest.taper.index[-1]] 
 
 		for(i in 1:s){
 			cor.toest <-  lapply(lapply(1/phi.est,"*", (-dist.toest.selected[[i]])), exp)
@@ -48,6 +47,9 @@ kg.term <- function(dist.toest, phi.est, chol.est.list, dist.toest.taper.index, 
 	kg.selected <- kg.selected[-1, ]
 	return(list(kg.selected, kg.var))
 }
+
+setwd("/mnt/ebs-volume/cloudwork")
+
 
 load("mcmc_results_PH.RData")
 covar.selected.est <- c( "bio1", "bio12", "CTI_1K", "ELEV_1K", "EVIM_1K", "M13RB1ALT", "NPP_Mean_1", "RELIEF_1K", "lstday", "lstnight")
@@ -81,11 +83,11 @@ depth.pred <- read.table("depthpred.txt")
 #load rgdal
 	library(rgdal)
 	
-	setwd("/mnt/ebs-volumne/cloudwork")
-	
+
 while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 	line.split <- strsplit(line, split=",")
-	system(paste("hadoop dfs -get s3n://afsis.legacy.prediction/data/dataForEachNode/", line.split[[1]][1], " .", sep=""))
+	system(paste("s3cmd get --skip-existing s3://afsis.legacy.prediction/data/dataForEachNode/", line.split[[1]][1], sep=""), intern=TRUE)
+	write(line.split[[1]][1], stderr())
 	if(length(grep("\\.tif$", line.split[[1]][1]))>0){	
 		startt <- proc.time()
 		tiffile <- line.split[[1]][1]
@@ -101,75 +103,46 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 		}else{
 		origin.y <- tif.info[5]	
 		}
-		evi.mask <- readGDAL(tiffile, band=5)@data$band1
+		evi.mask <- readGDAL(tiffile, band=5, silent=TRUE)@data$band1
 		block_count <- 0
+		
+		for(dp in 1:dim(depth.pred)[1]){
+			file.create( paste(line.split[[1]][1],"depth", depth.pred[dp,1], "PH.mean.txt", sep="."))
+			file.create(paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.sd.txt", sep="."))
+		}
+		file.create(paste(line.split[[1]][1], "PH.processtime.txt", sep="."))
+		
 	if(sum(!is.na(evi.mask))>0){
 		predict.gridx <- seq(origin.x, origin.x + (totalcols-1)*res.x, by=res.x)
 		predict.gridy <- seq(origin.y - (totalrows-1)*res.y, origin.y, by=res.y)
 		predict.grid <- cbind(x=rep(predict.gridx, totalrows), y=sort(rep(predict.gridy, totalcols), decreasing=TRUE))
 		predict.grid <- predict.grid/1000		
 		predict.grid <- predict.grid[!is.na(evi.mask),]
+		
+		if(sum(!is.na(evi.mask))==1){
+			predict.grid <- t(as.matrix(predict.grid))
+		}
 			
 		block_count <- dim(predict.grid)[1]
 		setwd("chol.est.list.PH")
 		chol.est.list.used.combined <- vector("list", (length(locations.est.list)-1))
 		kept.chol <- as.numeric(strsplit(line.split[[1]][2], split=" ")[[1]])
-		for(k in kept.chol){	
-			load(paste("chol_est_list_PH", k, "RData", sep="."))
-			chol.est.list.used.combined[[k]] <- chol.est.list.used		
-		}
-			
-		setwd("..")					
-		#predict for the first point	
-		i <- 1	
-		ptm <- proc.time()
-		pixeln.x <- ((predict.grid[i,1]*1000-origin.x)/res.x)
-		pixeln.y <- ((origin.y-predict.grid[i,2]*1000)/res.y)
-		predcov.values <- readGDAL(tiffile, band=covar.selected.map, offset=c(pixeln.y, pixeln.x), region.dim=c(1,1), silent=TRUE)@data
-		predcov.values.scaled <- t((t(predcov.values)-mean.covar)*(1/sd.covar))
-		# only predict the locations with reasonable covariates
-		if(sum(abs(predcov.values.scaled)>10)==0){
-			dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
-			dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
-			if(sum(dist.toest.taper.index)==0){
-				pred.random <- rnorm(length(phi.est), 0, sqrt(sigma2.alpha.est))
-			}else{
-			kg.term.values <- kg.term(dist.toest, phi.est, chol.est.list.used.combined, dist.toest.taper.index, taper.range)
-			alpha.selected <- do.call("rbind", alpha.est.list[dist.toest.taper.index])
-			kg.mean <- diag(t(alpha.selected)%*%kg.term.values[[1]])
-			kg.var <- sigma2.alpha.est - sigma2.alpha.est*kg.term.values[[2]]
-			pred.random <- rnorm(length(phi.est), kg.mean, sqrt(kg.var))
-			}
-			for(dp in 1:dim(depth.pred)[1]){
-				log.depth.pred1 <- log(depth.pred[dp,1])
-				predcov.values.whole <- cbind(1, (predcov.values.scaled), (predcov.values.scaled*log.depth.pred1), log.depth.pred1)
-				pred.fixed <- (predcov.values.whole%*%mean.coef.est)
-				pred.post.draw <- exp(pred.fixed + pred.random + rnorm(length(phi.est), 0, sqrt(sigma2.est)))
-				pred.mean <- mean(pred.post.draw)
-				pred.sd <- apply(log(pred.post.draw), 1, sd)
-				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.mean), paste(line.split[[1]][1],"depth", depth.pred[dp,1], "PH.mean.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)
-				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.sd), paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.sd.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)	
-				}
-		}else{
-			for(dp in 1:dim(depth.pred)[1]){
-				pred.mean <- NA
-				pred.sd <- NA
-				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.mean), paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.mean.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)
-				write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), pred.sd), paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.sd.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)		
-			}
-		}							
-		write.table(cbind(t(as.matrix(predict.grid[i, ]*1000)), as.matrix(proc.time()-ptm)[3]), paste(line.split[[1]][1], "PH.processtime.txt", sep="."), quote=FALSE, row.names=FALSE, col.names=FALSE)		
-		if((proc.time()-startt)[3]>heartbeat_threshold){
-			write((proc.time()-startt)[3], stderr())
+		if(sum(!is.na(kept.chol))>0){
+			for(k in kept.chol){	
+				load(paste("chol_est_list_PH", k, "RData", sep="."))
+				chol.est.list.used.combined[[k]] <- chol.est.list.used		
+			}		
 		}
 		
-		for(i in 2:(dim(predict.grid)[1])){
+		setwd("..")		
+		
+		for(i in 1:(dim(predict.grid)[1])){
 			ptm <- proc.time()
 			pixeln.x <- ((predict.grid[i,1]*1000-origin.x)/res.x)
 			pixeln.y <- ((origin.y-predict.grid[i,2]*1000)/res.y)
 			predcov.values <- readGDAL(tiffile, band=covar.selected.map, offset=c(pixeln.y, pixeln.x), region.dim=c(1,1), silent=TRUE)@data
 			predcov.values.scaled <- t((t(predcov.values)-mean.covar)*(1/sd.covar))
-			if(sum(abs(predcov.values.scaled)>10)==0){
+			if(sum(abs(predcov.values.scaled)>100)==0){
 				dist.toest <- mapply(loccords.jc, list(predict.grid[i,]), locations.est.list)
 				dist.toest.taper.index <- (mapply(sum, mapply("<",dist.toest, taper.range))>0)*(1:length(locations.est.list))	
 				if(sum(dist.toest.taper.index)==0){
@@ -204,18 +177,17 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 				write((proc.time()-startt)[3], stderr())
 			}
 		}
-		for(dp in 1:dim(depth.pred)[1]){
-			system(paste("hadoop dfs -put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.mean.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
-			system(paste("hadoop dfs -put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.sd.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
+		rm(list=c("chol.est.list.used.combined", "predict.grid", "evi.mask"))	
+		gc()
 		}	
-		system(paste("hadoop dfs -put", paste(line, "PH.processtime.txt", sep="."), "s3n://afsis.legacy.prediction/results/"))
-		cat("LongValueSum:1\t" , block_count)
-		cat("LongValueSum:", line.split[[1]][1], "\t", " 1", sep="")
-		rm(list="chol.est.list.used.combined")
-		}		
+		for(dp in 1:dim(depth.pred)[1]){
+			system(paste("s3cmd put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.mean.txt", sep="."), "s3://afsis.legacy.prediction/resultsPH/"), intern=TRUE)
+			system(paste("s3cmd put", paste(line.split[[1]][1], "depth", depth.pred[dp,1], "PH.sd.txt", sep="."), "s3://afsis.legacy.prediction/resultsPH/"), intern=TRUE)
+		}	
+		system(paste("s3cmd put", paste(line.split[[1]][1], "PH.processtime.txt", sep="."), "s3://afsis.legacy.prediction/resultsPH/"), intern=TRUE)
+		cat("LongValueSum:1\t" , block_count, "\n" , sep="")	
 	}
-	system(paste("rm", line.split[[1]][1]))
-	system(paste("rm", line.split[[1]][2]))		
 }
 
 close(f)
+
