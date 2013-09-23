@@ -129,7 +129,7 @@ predict_grid_1k <- SpatialPointsDataFrame(
   coords = predict_grid_1k_coords,
   data = data.frame(
  predict.mean = pred.mean,
- predict.se = predsd)
+ predict.se = pred.sd)
 )
 
 gridded(predict_grid_1k) <- TRUE
