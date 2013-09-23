@@ -125,6 +125,7 @@ while(length(line <- readLines(f,n=1, warn=FALSE)) > 0) {
 			
 		block_count <- dim(predict.grid)[1]
 		setwd("chol.est.list.SOC")
+		
 		chol.est.list.used.combined <- vector("list", (length(locations.est.list)-1))
 		kept.chol <- as.numeric(strsplit(line.split[[1]][2], split=" ")[[1]])
 		if(sum(!is.na(kept.chol))>0){

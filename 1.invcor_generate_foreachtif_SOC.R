@@ -1,4 +1,11 @@
-load("mcmc_results_PH.RData")
+# load MCMC results 
+# create index of clusters for the data needed for making predictions for each sub tif files
+# since we used a tapered covariate model, not all data points are needed for kriging for predicting every location;
+# in order to save computation memory, we only load in the clusters of data which are relevant
+
+
+load("mcmc_results_SOC.RData")
+
 rm(list=ls()[!ls()=="locations.est.list"])
 #load defined R functions
 sph.cor.func <- function(d, phi){
@@ -23,6 +30,7 @@ taper.range <- 40
 library(rgdal)
 
 setwd("/data3/JCdata/tif_data/")
+
 path <- getwd()
 
 file.create("datalist.keptcol.txt")

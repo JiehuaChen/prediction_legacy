@@ -1,4 +1,5 @@
 load("mcmc_results_exbase.RData")
+
 print(proc.time()-ptm)
 mcmc.results.onechain <- t(mcmc.results[,1,])
 P <- dim(X)[2]
