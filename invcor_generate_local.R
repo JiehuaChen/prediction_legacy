@@ -1,3 +1,5 @@
+# generate chol.est.list: the cholesky decomposition list of the MCMC covariance matrices
+
 load("mcmc_results_SOC.RData")
 print(proc.time()-ptm)
 
